@@ -222,10 +222,19 @@ pub fn reverse_line_to_byte_idx(text: &str, reversed_line_idx: usize) -> usize {
         match &text[i..=i + byte_count] {
             "\u{000A}" | "\u{000B}" | "\u{000C}" | "\u{000D}" | "\u{0085}" | "\u{2028}"
             | "\u{2029}" => {
-                line_count += 1;
-                if line_count == reversed_line_idx {
-                    return i + 1;
-                };
+                // Handle Windows CR+LF
+                if text.is_char_boundary(i - 1)
+                    && &text[i - 1..=i + byte_count] == "\u{000D}\u{000A}"
+                {
+                    if line_count + 1 == reversed_line_idx {
+                        return i + 1;
+                    };
+                } else {
+                    line_count += 1;
+                    if line_count == reversed_line_idx {
+                        return i + 1;
+                    };
+                }
             }
             _ => {}
         };
@@ -1296,7 +1305,7 @@ mod tests {
     #[test]
     fn reverse_line_to_byte_idx_02() {
         const TEXT_LINES: &str = "Hello there!  How're you doing?\nIt's \
-                                  a fine day, isn't it?\nAren't you glad \
+                                  a fine day, isn't it?\r\nAren't you glad \
                                   we're alive?\nこんにちは、みんなさん！\n";
         assert_eq!(line_to_byte_idx(TEXT_LINES, 0), reverse_line_to_byte_idx(TEXT_LINES, 5));
         assert_eq!(line_to_byte_idx(TEXT_LINES, 1), reverse_line_to_byte_idx(TEXT_LINES, 4));
