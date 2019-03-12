@@ -204,10 +204,10 @@ pub fn line_to_char_idx(text: &str, line_idx: usize) -> usize {
 /// An index greater than the count of line-breaks in `text` will return `0`.
 #[inline]
 pub fn reverse_line_to_byte_idx(text: &str, reversed_line_idx: usize) -> usize {
-    // TODO optimized
+    // TODO optimize
 
     if reversed_line_idx == 0 {
-        return text.len();        
+        return text.len();
     }
 
     let mut i = text.len() - 1;
@@ -1292,11 +1292,26 @@ mod tests {
 
     #[test]
     fn reverse_line_to_byte_idx_01() {
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 0), reverse_line_to_byte_idx(TEXT_LINES, 4));
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 1), reverse_line_to_byte_idx(TEXT_LINES, 3));
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 2), reverse_line_to_byte_idx(TEXT_LINES, 2));
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 3), reverse_line_to_byte_idx(TEXT_LINES, 1));
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 4), reverse_line_to_byte_idx(TEXT_LINES, 0));
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 0),
+            reverse_line_to_byte_idx(TEXT_LINES, 4)
+        );
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 1),
+            reverse_line_to_byte_idx(TEXT_LINES, 3)
+        );
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 2),
+            reverse_line_to_byte_idx(TEXT_LINES, 2)
+        );
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 3),
+            reverse_line_to_byte_idx(TEXT_LINES, 1)
+        );
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 4),
+            reverse_line_to_byte_idx(TEXT_LINES, 0)
+        );
 
         // Before start
         assert_eq!(0, reverse_line_to_byte_idx(TEXT_LINES, 5));
@@ -1307,18 +1322,34 @@ mod tests {
         const TEXT_LINES: &str = "Hello there!  How're you doing?\nIt's \
                                   a fine day, isn't it?\r\nAren't you glad \
                                   we're alive?\nこんにちは、みんなさん！\n";
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 0), reverse_line_to_byte_idx(TEXT_LINES, 5));
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 1), reverse_line_to_byte_idx(TEXT_LINES, 4));
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 2), reverse_line_to_byte_idx(TEXT_LINES, 3));
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 3), reverse_line_to_byte_idx(TEXT_LINES, 2));
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 4), reverse_line_to_byte_idx(TEXT_LINES, 1));
-        assert_eq!(line_to_byte_idx(TEXT_LINES, 5), reverse_line_to_byte_idx(TEXT_LINES, 0));
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 0),
+            reverse_line_to_byte_idx(TEXT_LINES, 5)
+        );
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 1),
+            reverse_line_to_byte_idx(TEXT_LINES, 4)
+        );
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 2),
+            reverse_line_to_byte_idx(TEXT_LINES, 3)
+        );
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 3),
+            reverse_line_to_byte_idx(TEXT_LINES, 2)
+        );
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 4),
+            reverse_line_to_byte_idx(TEXT_LINES, 1)
+        );
+        assert_eq!(
+            line_to_byte_idx(TEXT_LINES, 5),
+            reverse_line_to_byte_idx(TEXT_LINES, 0)
+        );
 
         // Before start
         assert_eq!(0, reverse_line_to_byte_idx(TEXT_LINES, 6));
     }
-
-
 
     #[test]
     fn line_to_char_idx_01() {
