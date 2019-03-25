@@ -120,8 +120,10 @@ impl<'a> Iterator for Chars<'a> {
 ///
 /// The last line is returned even if blank, in which case it
 /// is returned as an empty slice.
+#[derive(Clone)]
 pub struct Lines<'a>(LinesEnum<'a>);
 
+#[derive(Clone)]
 enum LinesEnum<'a> {
     Full {
         node: &'a Arc<Node>,
