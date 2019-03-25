@@ -135,6 +135,8 @@ enum LinesEnum<'a> {
     Light {
         text: &'a str,
         done: bool,
+        line_idx: usize,
+        rev_line_idx: Option<usize>,
     },
 }
 
@@ -169,6 +171,8 @@ impl<'a> Lines<'a> {
         Lines(LinesEnum::Light {
             text: text,
             done: false,
+            line_idx: 0,
+            rev_line_idx: None,
         })
     }
 }
@@ -219,6 +223,8 @@ impl<'a> Iterator for Lines<'a> {
             Lines(LinesEnum::Light {
                 ref mut text,
                 ref mut done,
+                ref mut line_idx,
+                ..
             }) => {
                 if *done && text.is_empty() {
                     return None;
@@ -226,6 +232,7 @@ impl<'a> Iterator for Lines<'a> {
                     *done = true;
                     return Some("".into());
                 } else {
+                    *line_idx += 1;
                     let split_idx = line_to_byte_idx(text, 1);
                     let t = &text[..split_idx];
                     *text = &text[split_idx..];
@@ -233,6 +240,31 @@ impl<'a> Iterator for Lines<'a> {
                         *done = !ends_with_line_break(t);
                     }
                     return Some(t.into());
+                }
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self.0 {
+            LinesEnum::Full {
+                line_idx,
+                rev_line_idx,
+                ..
+            } => {
+                let len = rev_line_idx + 1 - line_idx.min(rev_line_idx);
+                (len, Some(len))
+            }
+            LinesEnum::Light {
+                line_idx,
+                rev_line_idx,
+                ..
+            } => {
+                if let Some(rev_line_idx) = rev_line_idx {
+                    let len = rev_line_idx - line_idx.min(rev_line_idx);
+                    (len, Some(len))
+                } else {
+                    (0, None)
                 }
             }
         }
@@ -275,10 +307,15 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
             Lines(LinesEnum::Light {
                 ref mut text,
                 ref mut done,
+                ref mut rev_line_idx,
+                ..
             }) => {
                 if *done && text.is_empty() {
                     return None;
                 } else {
+                    rev_line_idx.map(|ref mut idx| {
+                        *idx -= 1;
+                    });
                     let split_idx = reverse_line_to_byte_idx(text, 1);
                     let t = &text[..split_idx];
                     *text = &text[split_idx..];
