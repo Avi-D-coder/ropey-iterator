@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use slice::RopeSlice;
 use str_utils::{
-    char_to_byte_idx, char_to_line_idx, ends_with_line_break, line_to_byte_idx, line_to_char_idx,
-    reverse_line_to_byte_idx,
+    char_to_byte_idx, char_to_line_idx, count_line_breaks, ends_with_line_break, line_to_byte_idx,
+    line_to_char_idx, reverse_line_to_byte_idx,
 };
 use tree::Node;
 
@@ -321,6 +321,41 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
                     *text = &text[split_idx..];
                     *done = true;
                     return Some(t.into());
+                }
+            }
+        }
+    }
+}
+
+impl<'l> ExactSizeIterator for Lines<'l> {
+    fn len(&self) -> usize {
+        // A mutable reference is necessary for memorization of Light str length
+        let lines: &mut Self = unsafe { &mut *(self as *const Self as *mut Self) };
+
+        match lines.0 {
+            LinesEnum::Full {
+                line_idx,
+                rev_line_idx,
+                ..
+            } => rev_line_idx + 1 - line_idx.min(rev_line_idx),
+            LinesEnum::Light {
+                line_idx,
+                ref mut rev_line_idx,
+                text,
+                done,
+            } => {
+                if let Some(rev_line_idx) = rev_line_idx {
+                    *rev_line_idx - line_idx.max(*rev_line_idx)
+                } else {
+                    // Start counts as 1
+                    let count = count_line_breaks(text);
+                    let len = if !done && ends_with_line_break(text) {
+                        count + 1
+                    } else {
+                        count
+                    };
+                    *rev_line_idx = Some(line_idx + len);
+                    len
                 }
             }
         }
