@@ -1,4 +1,5 @@
 use std;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::iter::FromIterator;
 use std::ops::RangeBounds;
@@ -1418,6 +1419,14 @@ impl std::cmp::PartialOrd<Rope> for Rope {
     #[inline]
     fn partial_cmp(&self, other: &Rope) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl Hash for Rope {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for c in self.chars() {
+            c.hash(state)
+        }
     }
 }
 

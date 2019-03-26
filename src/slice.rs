@@ -1,4 +1,5 @@
 use std;
+use std::hash::{Hash, Hasher};
 use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 
@@ -996,6 +997,14 @@ impl<'a, 'b> std::cmp::PartialOrd<RopeSlice<'b>> for RopeSlice<'a> {
     #[inline]
     fn partial_cmp(&self, other: &RopeSlice<'b>) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl<'a> Hash for RopeSlice<'a> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for c in self.chars() {
+            c.hash(state)
+        }
     }
 }
 
