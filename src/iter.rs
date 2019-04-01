@@ -177,6 +177,42 @@ impl<'a> Lines<'a> {
     }
 }
 
+#[inline]
+fn full_nth<'a>(
+    n: usize,
+    node: &mut &'a Arc<Node>,
+    start_char: usize,
+    end_char: usize,
+    line_idx: &mut usize,
+    rev_line_idx: usize,
+) -> Option<RopeSlice<'a>> {
+    let nth_idx = *line_idx + n;
+    if nth_idx > rev_line_idx {
+        return None;
+    } else {
+        let a = {
+            // Find the char that corresponds to the start of the line.
+            let (chunk, _, c, l) = node.get_chunk_at_line_break(nth_idx);
+            (c + line_to_char_idx(chunk, nth_idx - l)).max(start_char)
+        };
+        // Early out if we're past the specified end char
+        if a > end_char {
+            *line_idx = rev_line_idx + 1;
+            return None;
+        }
+
+        let b = {
+            // Find the char that corresponds to the end of the line.
+            let (chunk, _, c, l) = node.get_chunk_at_line_break(nth_idx + 1);
+            end_char.min(c + line_to_char_idx(chunk, nth_idx + 1 - l))
+        };
+
+        *line_idx = nth_idx + 1;
+
+        return Some(RopeSlice::new_with_range(node, a, b));
+    }
+}
+
 impl<'a> Iterator for Lines<'a> {
     type Item = RopeSlice<'a>;
 
@@ -188,38 +224,7 @@ impl<'a> Iterator for Lines<'a> {
                 end_char,
                 ref mut line_idx,
                 rev_line_idx,
-            }) => {
-                if *line_idx > rev_line_idx {
-                    return None;
-                } else {
-                    let a = {
-                        // Find the char that corresponds to the start of the line.
-                        let (chunk, _, c, l) = node.get_chunk_at_line_break(*line_idx);
-                        let a = (c + line_to_char_idx(chunk, *line_idx - l)).max(start_char);
-
-                        // Early out if we're past the specified end char
-                        if a > end_char {
-                            *line_idx = rev_line_idx + 1;
-                            return None;
-                        }
-
-                        a
-                    };
-
-                    let b = if *line_idx < rev_line_idx {
-                        // Find the char that corresponds to the end of the line.
-                        let (chunk, _, c, l) = node.get_chunk_at_line_break(*line_idx + 1);
-                        c + line_to_char_idx(chunk, *line_idx + 1 - l)
-                    } else {
-                        node.char_count()
-                    }
-                    .min(end_char);
-
-                    *line_idx += 1;
-
-                    return Some(RopeSlice::new_with_range(node, a, b));
-                }
-            }
+            }) => full_nth(0, node, start_char, end_char, line_idx, rev_line_idx),
             Lines(LinesEnum::Light {
                 ref mut text,
                 ref mut done,
@@ -240,6 +245,63 @@ impl<'a> Iterator for Lines<'a> {
                         *done = !ends_with_line_break(t);
                     }
                     return Some(t.into());
+                }
+            }
+        }
+    }
+
+    fn nth(&mut self, n: usize) -> Option<RopeSlice<'a>> {
+        match *self {
+            Lines(LinesEnum::Full {
+                ref mut node,
+                start_char,
+                end_char,
+                ref mut line_idx,
+                rev_line_idx,
+            }) => full_nth(n, node, start_char, end_char, line_idx, rev_line_idx),
+            Lines(LinesEnum::Light {
+                ref mut text,
+                ref mut done,
+                ref mut line_idx,
+                ..
+            }) => {
+                if *done && text.is_empty() {
+                    return None;
+                } else if text.is_empty() {
+                    *done = true;
+                    return Some("".into());
+                } else {
+                    *line_idx += 1 + n;
+                    let split_idx = line_to_byte_idx(text, 1 + n);
+                    let head_text = &text[..split_idx];
+                    let tail_text = &text[split_idx..];
+
+                    if !*done && tail_text.is_empty() {
+                        let pre_text = &text[..line_to_byte_idx(text, n)];
+                        if head_text.is_empty()
+                            && (pre_text.is_empty() || !ends_with_line_break(pre_text))
+                        {
+                            *text = "";
+                            *done = true;
+                            return None;
+                        } else {
+                            *done = !ends_with_line_break(head_text);
+                        }
+                    };
+
+                    if *done && head_text.is_empty() {
+                        *text = "";
+                        return None;
+                    } else {
+                        *text = tail_text;
+                        if ends_with_line_break(head_text) {
+                            let line = &head_text[reverse_line_to_byte_idx(head_text, 2)..];
+                            return Some(line.into());
+                        } else {
+                            let line = &head_text[reverse_line_to_byte_idx(head_text, 1)..];
+                            return Some(line.into());
+                        }
+                    }
                 }
             }
         }
