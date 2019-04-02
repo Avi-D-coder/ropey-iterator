@@ -6,6 +6,7 @@
 //! of the first and last yielded item will be truncated to match the
 //! `RopeSlice`.
 
+use std::cell::UnsafeCell;
 use std::str;
 use std::sync::Arc;
 
@@ -120,10 +121,8 @@ impl<'a> Iterator for Chars<'a> {
 ///
 /// The last line is returned even if blank, in which case it
 /// is returned as an empty slice.
-#[derive(Clone)]
 pub struct Lines<'a>(LinesEnum<'a>);
 
-#[derive(Clone)]
 enum LinesEnum<'a> {
     Full {
         node: &'a Arc<Node>,
@@ -136,7 +135,8 @@ enum LinesEnum<'a> {
         text: &'a str,
         done: bool,
         line_idx: usize,
-        rev_line_idx: Option<usize>,
+        // The number of lines in the `text` is lazily calculated
+        rev_line_idx: UnsafeCell<Option<usize>>,
     },
 }
 
@@ -172,7 +172,7 @@ impl<'a> Lines<'a> {
             text: text,
             done: false,
             line_idx: 0,
-            rev_line_idx: None,
+            rev_line_idx: UnsafeCell::new(None),
         })
     }
 }
@@ -308,22 +308,22 @@ impl<'a> Iterator for Lines<'a> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        match self.0 {
-            LinesEnum::Full {
+        match self {
+            Lines(LinesEnum::Full {
                 line_idx,
                 rev_line_idx,
                 ..
-            } => {
+            }) => {
                 let len = rev_line_idx + 1 - line_idx.min(rev_line_idx);
                 (len, Some(len))
             }
-            LinesEnum::Light {
+            Lines(LinesEnum::Light {
                 line_idx,
                 rev_line_idx,
                 ..
-            } => {
-                if let Some(rev_line_idx) = rev_line_idx {
-                    let len = rev_line_idx - line_idx.min(rev_line_idx);
+            }) => {
+                if let Some(rev_line_idx) = unsafe { *rev_line_idx.get() } {
+                    let len = rev_line_idx - rev_line_idx.min(*line_idx);
                     (len, Some(len))
                 } else {
                     (0, None)
@@ -375,9 +375,9 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
                 if *done && text.is_empty() {
                     return None;
                 } else {
-                    rev_line_idx.map(|ref mut idx| {
+                    if let Some(ref mut idx) = unsafe { *rev_line_idx.get() } {
                         *idx -= 1;
-                    });
+                    };
                     let split_idx = reverse_line_to_byte_idx(text, 1);
                     let t = &text[..split_idx];
                     *text = &text[split_idx..];
@@ -392,9 +392,7 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
 impl<'l> ExactSizeIterator for Lines<'l> {
     fn len(&self) -> usize {
         // A mutable reference is necessary for memorization of Light str length
-        let lines: &mut Self = unsafe { &mut *(self as *const Self as *mut Self) };
-
-        match lines.0 {
+        match self.0 {
             LinesEnum::Full {
                 line_idx,
                 rev_line_idx,
@@ -402,12 +400,12 @@ impl<'l> ExactSizeIterator for Lines<'l> {
             } => rev_line_idx + 1 - line_idx.min(rev_line_idx),
             LinesEnum::Light {
                 line_idx,
-                ref mut rev_line_idx,
+                ref rev_line_idx,
                 text,
                 done,
             } => {
-                if let Some(rev_line_idx) = rev_line_idx {
-                    *rev_line_idx - line_idx.max(*rev_line_idx)
+                if let Some(rev_line_idx) = unsafe { *rev_line_idx.get() } {
+                    rev_line_idx - line_idx.max(rev_line_idx)
                 } else {
                     // Start counts as 1
                     let count = count_line_breaks(text);
@@ -416,11 +414,42 @@ impl<'l> ExactSizeIterator for Lines<'l> {
                     } else {
                         count
                     };
-                    *rev_line_idx = Some(line_idx + len);
+                    unsafe { *rev_line_idx.get() = Some(line_idx + len) };
                     len
                 }
             }
         }
+    }
+}
+
+impl<'l> Clone for Lines<'l> {
+    fn clone(&self) -> Self {
+        Lines(match self {
+            Lines(LinesEnum::Full {
+                node,
+                start_char,
+                end_char,
+                line_idx,
+                rev_line_idx,
+            }) => LinesEnum::Full {
+                node: *node,
+                start_char: *start_char,
+                end_char: *end_char,
+                line_idx: *line_idx,
+                rev_line_idx: *rev_line_idx,
+            },
+            Lines(LinesEnum::Light {
+                text,
+                done,
+                line_idx,
+                rev_line_idx,
+            }) => LinesEnum::Light {
+                text,
+                done: *done,
+                line_idx: *line_idx,
+                rev_line_idx: UnsafeCell::new(unsafe { *rev_line_idx.get() }),
+            },
+        })
     }
 }
 
