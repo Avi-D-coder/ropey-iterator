@@ -7,6 +7,7 @@
 //! `RopeSlice`.
 
 use std::cell::UnsafeCell;
+use std::ops::Range;
 use std::str;
 use std::sync::Arc;
 
@@ -174,6 +175,49 @@ impl<'a> Lines<'a> {
             line_idx: 0,
             rev_line_idx: UnsafeCell::new(None),
         })
+    }
+
+    /// Narrows the slice of lines to be iterated over.
+    /// The `lines` argument describes a range within the lines that have yet to be iterated over.
+    pub fn narrow(mut self, lines: Range<usize>) -> Self {
+        match &mut self.0 {
+            LinesEnum::Full {
+                line_idx,
+                rev_line_idx,
+                ..
+            } => {
+                *rev_line_idx = (*rev_line_idx).min(lines.end - 1 + *line_idx);
+                *line_idx = (*rev_line_idx).min(lines.start + *line_idx);
+            }
+            LinesEnum::Light {
+                text,
+                done,
+                line_idx,
+                rev_line_idx,
+            } => {
+                let split_idx = line_to_byte_idx(text, lines.end);
+                let head_text = &text[..split_idx];
+                let tail_text = &text[split_idx..];
+
+                *rev_line_idx = if !*done && tail_text.is_empty() && ends_with_line_break(head_text)
+                {
+                    let count_line_breaks = count_line_breaks(text);
+                    if lines.end > count_line_breaks {
+                        UnsafeCell::new(Some(*line_idx + count_line_breaks))
+                    } else {
+                        *done = true;
+                        UnsafeCell::new(Some(*line_idx + lines.end))
+                    }
+                } else {
+                    *done = true;
+                    UnsafeCell::new(Some(*line_idx + lines.end))
+                };
+
+                let split_idx = line_to_byte_idx(head_text, lines.start);
+                *text = &head_text[split_idx..];
+            }
+        }
+        self
     }
 }
 
@@ -932,6 +976,15 @@ mod tests {
 
         let forward: Vec<&str> = TEXT.lines().collect();
         assert_eq!(forward, front);
+    }
+
+    #[test]
+    fn narrow_lines_01() {
+        let r = Rope::from_str(TEXT);
+        let r = r.lines();
+        let nr: Vec<_> = r.clone().narrow(0..r.len()).collect();
+        let r: Vec<_> = r.collect();
+        assert_eq!(nr, r)
     }
 
     #[test]
