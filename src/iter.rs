@@ -497,6 +497,29 @@ impl<'l> Clone for Lines<'l> {
     }
 }
 
+impl<'a> PartialEq for Lines<'a> {
+    fn eq(&self, rhs: &Self) -> bool {
+        let mut left = self.clone();
+        let mut right = rhs.clone();
+        loop {
+            let l = left.next();
+            let r = right.next();
+            match (l, r) {
+                (Some(l), Some(r)) => {
+                    if l != r {
+                        return false;
+                    }
+                }
+                (None, None) => break,
+                _ => return false,
+            }
+        }
+        return true;
+    }
+}
+
+impl<'a> Eq for Lines<'a> {}
+
 //==========================================================
 
 /// An iterator over a `Rope`'s contiguous `str` chunks.
