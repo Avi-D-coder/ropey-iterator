@@ -7,6 +7,7 @@
 //! `RopeSlice`.
 
 use std::cell::UnsafeCell;
+use std::fmt;
 use std::ops::Range;
 use std::str;
 use std::sync::Arc;
@@ -519,6 +520,14 @@ impl<'a> PartialEq for Lines<'a> {
 }
 
 impl<'a> Eq for Lines<'a> {}
+
+impl<'a> fmt::Debug for Lines<'a> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_list()
+            .entries(self.clone().map(|l| l.chars().collect::<String>()))
+            .finish()
+    }
+}
 
 //==========================================================
 
