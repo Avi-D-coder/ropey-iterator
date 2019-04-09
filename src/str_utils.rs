@@ -209,38 +209,20 @@ pub fn reverse_line_to_byte_idx(text: &str, reversed_line_idx: usize) -> usize {
         return text.len();
     }
 
-    let mut i = text.len() - 1;
+    let mut i = text.len();
     let mut line_count = 0;
+
     while i > 0 {
-        let mut byte_count = 0;
-        while !text.is_char_boundary(i) {
-            i -= 1;
-            byte_count += 1;
-        }
-
-        match &text[i..=i + byte_count] {
-            "\u{000A}" | "\u{000B}" | "\u{000C}" | "\u{000D}" | "\u{0085}" | "\u{2028}"
-            | "\u{2029}" => {
-                // Handle Windows CR+LF
-                // Don't increment line_count on a LF after a CR.
-                if text.is_char_boundary(i - 1)
-                    && &text[i - 1..=i + byte_count] == "\u{000D}\u{000A}"
-                {
-                    if line_count + 1 == reversed_line_idx {
-                        return i + 1;
-                    };
-                } else {
-                    line_count += 1;
-                    if line_count == reversed_line_idx {
-                        return i + 1;
-                    };
+        match end_line_break_len(&text[..i]) {
+            Err(bl) => i -= bl as usize,
+            Ok(bl) => {
+                line_count += 1;
+                if line_count == reversed_line_idx {
+                    return i;
                 }
+                i -= bl as usize;
             }
-            _ => {}
         };
-
-        // Move to preceding codepoint.
-        i -= 1;
     }
     0
 }
@@ -266,6 +248,37 @@ pub(crate) fn ends_with_line_break(text: &str) -> bool {
         "\u{000A}" | "\u{000B}" | "\u{000C}" | "\u{000D}" | "\u{0085}" | "\u{2028}"
         | "\u{2029}" => true,
         _ => false,
+    }
+}
+
+/// Returns `Ok` with the number of bytes comprising a terminating line-break.
+/// Returns `Err` with the number of bytes in last char,
+/// if given `str` does not end with a line-break.
+#[inline]
+pub(crate) fn end_line_break_len(text: &str) -> Result<u8, u8> {
+    if text.is_empty() {
+        return Err(0);
+    }
+    // Find the starting boundary of the last codepoint.
+    let mut i = text.len() - 1;
+    while !text.is_char_boundary(i) {
+        i -= 1;
+    }
+
+    // Check if the last codepoint is a line break.
+    match &text[i..] {
+        "\u{000B}" | "\u{000C}" | "\u{000D}" => Ok(1),
+        "\u{000A}" => {
+            // \r\n
+            if text.is_char_boundary(i - 1) && &text[i - 1..i] == "\u{000D}" {
+                Ok(2)
+            } else {
+                Ok(1)
+            }
+        }
+        "\u{0085}" => Ok(2),
+        "\u{2028}" | "\u{2029}" => Ok(3),
+        _ => Err((text.len() - i) as u8),
     }
 }
 
