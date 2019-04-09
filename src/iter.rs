@@ -1034,11 +1034,52 @@ mod tests {
 
     #[test]
     fn narrow_lines_01() {
-        let r = Rope::from_str(TEXT);
-        let r = r.lines();
-        let nr: Vec<_> = r.clone().narrow(0..r.len()).collect();
-        let r: Vec<_> = r.collect();
-        assert_eq!(nr, r)
+        let light = Lines::from_str(TEXT);
+        let full = Rope::from_str(TEXT);
+        let full = full.lines();
+
+        let nf = full.clone().narrow(0..full.clone().len());
+        let nl = light.clone().narrow(0..light.clone().len());
+        // After `light.len()` narrow knows the line break count.
+        let nll = light.clone().narrow(0..light.len());
+
+        let l = light;
+        let f = full.clone();
+        assert_eq!(f, l);
+        assert_eq!(f, nl);
+        assert_eq!(f, nll);
+        assert_eq!(f, nf);
+    }
+
+    #[test]
+    fn narrow_lines_02() {
+        let light = Lines::from_str(TEXT);
+        let full = Rope::from_str(TEXT);
+        let full = full.lines();
+
+        let f = full.clone().skip(2).take(2);
+        let l = light.clone().skip(2).take(2);
+
+        let fv = f.clone().next();
+        let lv = l.clone().next();
+
+        assert_eq!(fv, lv);
+
+        let nf = full.clone().narrow(2..4);
+        let nl = light.clone().narrow(2..4);
+        assert_eq!(nf, nl);
+        assert_eq!(
+            f.clone().collect::<Vec<_>>(),
+            nl.clone().collect::<Vec<_>>()
+        );
+
+        let nl = nl.clone().narrow(0..3);
+        let nf = nf.clone().narrow(0..3);
+        assert_eq!(nf, nl);
+        assert_eq!(
+            f.clone().collect::<Vec<_>>(),
+            nl.clone().collect::<Vec<_>>()
+        );
     }
 
     #[test]
