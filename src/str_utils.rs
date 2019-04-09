@@ -199,8 +199,10 @@ pub fn line_to_char_idx(text: &str, line_idx: usize) -> usize {
 
 /// Counts lines backwards from end of `&str`.
 /// The start and end of a `&str` are counted as line-breaks.
-///
 /// An index greater than the count of line-breaks in `text` will return `0`.
+///
+/// A terminating line-break will appear at index 0.
+/// In other words a trailing line-break will not be counted.
 #[inline]
 pub fn reverse_line_to_byte_idx(text: &str, reversed_line_idx: usize) -> usize {
     // TODO optimize
@@ -210,6 +212,13 @@ pub fn reverse_line_to_byte_idx(text: &str, reversed_line_idx: usize) -> usize {
     }
 
     let mut i = text.len();
+
+    // Skip Terminating line break
+    match end_line_break_len(text) {
+         Ok(bl) => i -= bl as usize,
+         Err(bl) => i -= bl as usize,
+    }
+
     let mut line_count = 0;
 
     while i > 0 {
@@ -1337,26 +1346,22 @@ mod tests {
                                   we're alive?\nこんにちは、みんなさん！\n";
         assert_eq!(
             line_to_byte_idx(TEXT_LINES, 0),
-            reverse_line_to_byte_idx(TEXT_LINES, 5)
-        );
-        assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 1),
             reverse_line_to_byte_idx(TEXT_LINES, 4)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 2),
+            line_to_byte_idx(TEXT_LINES, 1),
             reverse_line_to_byte_idx(TEXT_LINES, 3)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 3),
+            line_to_byte_idx(TEXT_LINES, 2),
             reverse_line_to_byte_idx(TEXT_LINES, 2)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 4),
+            line_to_byte_idx(TEXT_LINES, 3),
             reverse_line_to_byte_idx(TEXT_LINES, 1)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 5),
+            line_to_byte_idx(TEXT_LINES, 4),
             reverse_line_to_byte_idx(TEXT_LINES, 0)
         );
 
