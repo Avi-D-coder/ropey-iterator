@@ -199,7 +199,6 @@ pub fn line_to_char_idx(text: &str, line_idx: usize) -> usize {
 
 /// Counts lines backwards from end of `&str`.
 /// The start and end of a `&str` are counted as line-breaks.
-/// If a `&str` is terminated with a line-break it will appear at index `0`.
 ///
 /// An index greater than the count of line-breaks in `text` will return `0`.
 #[inline]
@@ -223,6 +222,7 @@ pub fn reverse_line_to_byte_idx(text: &str, reversed_line_idx: usize) -> usize {
             "\u{000A}" | "\u{000B}" | "\u{000C}" | "\u{000D}" | "\u{0085}" | "\u{2028}"
             | "\u{2029}" => {
                 // Handle Windows CR+LF
+                // Don't increment line_count on a LF after a CR.
                 if text.is_char_boundary(i - 1)
                     && &text[i - 1..=i + byte_count] == "\u{000D}\u{000A}"
                 {
