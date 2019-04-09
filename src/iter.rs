@@ -673,6 +673,7 @@ impl<'a> Iterator for Chunks<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::Lines;
     use Rope;
 
     const TEXT: &str = "\r\n\
@@ -1008,6 +1009,27 @@ mod tests {
 
         let forward: Vec<&str> = TEXT.lines().collect();
         assert_eq!(forward, front);
+    }
+
+    #[test]
+    fn lines_size_hint_01() {
+        let light = Lines::from_str(TEXT);
+        let full = Rope::from_str(TEXT);
+
+        assert_eq!(full.lines().size_hint().0, full.lines().len());
+
+        assert_eq!(light.size_hint().0, 0);
+        assert_eq!(light.size_hint().1, None);
+        assert_eq!(light.len(), light.size_hint().0);
+    }
+
+    #[test]
+    fn exact_lines_len() {
+        let full = Rope::from_str(TEXT);
+        let light = Lines::from_str(TEXT);
+        assert_eq!(full.lines().count(), full.lines().len());
+        assert_eq!(full.lines().count(), light.clone().count());
+        assert_eq!(dbg!(light.clone()).count(), light.clone().len());
     }
 
     #[test]
