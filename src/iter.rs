@@ -8,6 +8,7 @@
 
 use std::cell::UnsafeCell;
 use std::fmt;
+use std::iter::FusedIterator;
 use std::ops::Range;
 use std::str;
 use std::sync::Arc;
@@ -114,6 +115,8 @@ impl<'a> Iterator for Chars<'a> {
         }
     }
 }
+
+impl<'a> FusedIterator for Chars<'a> {}
 
 //==========================================================
 
@@ -543,6 +546,7 @@ impl<'a> PartialEq for Lines<'a> {
 }
 
 impl<'a> Eq for Lines<'a> {}
+impl<'a> FusedIterator for Lines<'a> {}
 
 impl<'a> fmt::Debug for Lines<'a> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
