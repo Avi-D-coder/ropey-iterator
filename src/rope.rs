@@ -851,7 +851,7 @@ impl Rope {
             self.len_bytes()
         } else {
             let (chunk, b, _, l) = self.chunk_at_line_break(line_idx);
-            b + line_to_byte_idx(chunk, line_idx - l)
+            b + line_to_byte_idx(chunk, line_idx - l).byte_idx
         }
     }
 
@@ -952,8 +952,8 @@ impl Rope {
         let (chunk_1, _, c1, l1) = self.chunk_at_line_break(line_idx);
         let (chunk_2, _, c2, l2) = self.chunk_at_line_break(line_idx + 1);
         if c1 == c2 {
-            let text1 = &chunk_1[line_to_byte_idx(chunk_1, line_idx - l1)..];
-            let text2 = &text1[..line_to_byte_idx(text1, 1)];
+            let text1 = &chunk_1[line_to_byte_idx(chunk_1, line_idx - l1).byte_idx..];
+            let text2 = &text1[..line_to_byte_idx(text1, 1).byte_idx];
             RopeSlice(RSEnum::Light {
                 text: text2,
                 char_count: count_chars(text2) as Count,

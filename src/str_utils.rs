@@ -134,8 +134,9 @@ pub fn char_to_line_idx(text: &str, char_idx: usize) -> usize {
 /// line.
 ///
 /// Any past-the-end index will return the one-past-the-end byte index.
+/// The actual number of line breaks fond is also returned.
 #[inline]
-pub fn line_to_byte_idx(text: &str, line_idx: usize) -> usize {
+pub fn line_to_byte_idx(text: &str, line_idx: usize) -> BytesLines {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("sse2") {
@@ -147,8 +148,14 @@ pub fn line_to_byte_idx(text: &str, line_idx: usize) -> usize {
     line_to_byte_idx_inner::<usize>(text, line_idx)
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct BytesLines {
+    pub byte_idx: usize,
+    pub line_breaks: usize,
+}
+
 #[inline(always)]
-fn line_to_byte_idx_inner<T: ByteChunk>(text: &str, line_idx: usize) -> usize {
+fn line_to_byte_idx_inner<T: ByteChunk>(text: &str, line_idx: usize) -> BytesLines {
     let mut bytes = text.as_bytes();
     let mut line_break_count = 0;
 
@@ -183,7 +190,10 @@ fn line_to_byte_idx_inner<T: ByteChunk>(text: &str, line_idx: usize) -> usize {
     while !text.is_char_boundary(byte_idx) {
         byte_idx += 1;
     }
-    byte_idx
+    BytesLines {
+        byte_idx,
+        line_breaks: result.0 + line_break_count,
+    }
 }
 
 /// Converts from line-index to char-index in a string slice.
@@ -194,7 +204,7 @@ fn line_to_byte_idx_inner<T: ByteChunk>(text: &str, line_idx: usize) -> usize {
 /// Any past-the-end index will return the one-past-the-end char index.
 #[inline]
 pub fn line_to_char_idx(text: &str, line_idx: usize) -> usize {
-    byte_to_char_idx(text, line_to_byte_idx(text, line_idx))
+    byte_to_char_idx(text, line_to_byte_idx(text, line_idx).byte_idx)
 }
 
 /// Counts lines backwards from end of `&str`.
@@ -215,8 +225,8 @@ pub fn reverse_line_to_byte_idx(text: &str, reversed_line_idx: usize) -> usize {
 
     // Skip Terminating line break
     match end_line_break_len(text) {
-         Ok(bl) => i -= bl as usize,
-         Err(bl) => i -= bl as usize,
+        Ok(bl) => i -= bl as usize,
+        Err(bl) => i -= bl as usize,
     }
 
     let mut line_count = 0;
@@ -1282,56 +1292,56 @@ mod tests {
     #[test]
     fn line_to_byte_idx_01() {
         let text = "Here\r\nare\r\nsome\r\nwords";
-        assert_eq!(0, line_to_byte_idx(text, 0));
-        assert_eq!(6, line_to_byte_idx(text, 1));
-        assert_eq!(11, line_to_byte_idx(text, 2));
-        assert_eq!(17, line_to_byte_idx(text, 3));
+        assert_eq!(0, line_to_byte_idx(text, 0).byte_idx);
+        assert_eq!(6, line_to_byte_idx(text, 1).byte_idx);
+        assert_eq!(11, line_to_byte_idx(text, 2).byte_idx);
+        assert_eq!(17, line_to_byte_idx(text, 3).byte_idx);
     }
 
     #[test]
     fn line_to_byte_idx_02() {
         let text = "\nHere\nare\nsome\nwords\n";
-        assert_eq!(0, line_to_byte_idx(text, 0));
-        assert_eq!(1, line_to_byte_idx(text, 1));
-        assert_eq!(6, line_to_byte_idx(text, 2));
-        assert_eq!(10, line_to_byte_idx(text, 3));
-        assert_eq!(15, line_to_byte_idx(text, 4));
-        assert_eq!(21, line_to_byte_idx(text, 5));
+        assert_eq!(0, line_to_byte_idx(text, 0).byte_idx);
+        assert_eq!(1, line_to_byte_idx(text, 1).byte_idx);
+        assert_eq!(6, line_to_byte_idx(text, 2).byte_idx);
+        assert_eq!(10, line_to_byte_idx(text, 3).byte_idx);
+        assert_eq!(15, line_to_byte_idx(text, 4).byte_idx);
+        assert_eq!(21, line_to_byte_idx(text, 5).byte_idx);
     }
 
     #[test]
     fn line_to_byte_idx_03() {
-        assert_eq!(0, line_to_byte_idx(TEXT_LINES, 0));
-        assert_eq!(32, line_to_byte_idx(TEXT_LINES, 1));
-        assert_eq!(59, line_to_byte_idx(TEXT_LINES, 2));
-        assert_eq!(88, line_to_byte_idx(TEXT_LINES, 3));
+        assert_eq!(0, line_to_byte_idx(TEXT_LINES, 0).byte_idx);
+        assert_eq!(32, line_to_byte_idx(TEXT_LINES, 1).byte_idx);
+        assert_eq!(59, line_to_byte_idx(TEXT_LINES, 2).byte_idx);
+        assert_eq!(88, line_to_byte_idx(TEXT_LINES, 3).byte_idx);
 
         // Past end
-        assert_eq!(124, line_to_byte_idx(TEXT_LINES, 4));
-        assert_eq!(124, line_to_byte_idx(TEXT_LINES, 5));
-        assert_eq!(124, line_to_byte_idx(TEXT_LINES, 6));
+        assert_eq!(124, line_to_byte_idx(TEXT_LINES, 4).byte_idx);
+        assert_eq!(124, line_to_byte_idx(TEXT_LINES, 5).byte_idx);
+        assert_eq!(124, line_to_byte_idx(TEXT_LINES, 6).byte_idx);
     }
 
     #[test]
     fn reverse_line_to_byte_idx_01() {
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 0),
+            line_to_byte_idx(TEXT_LINES, 0).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 4)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 1),
+            line_to_byte_idx(TEXT_LINES, 1).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 3)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 2),
+            line_to_byte_idx(TEXT_LINES, 2).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 2)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 3),
+            line_to_byte_idx(TEXT_LINES, 3).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 1)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 4),
+            line_to_byte_idx(TEXT_LINES, 4).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 0)
         );
 
@@ -1345,23 +1355,23 @@ mod tests {
                                   a fine day, isn't it?\r\nAren't you glad \
                                   we're alive?\nこんにちは、みんなさん！\n";
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 0),
+            line_to_byte_idx(TEXT_LINES, 0).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 4)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 1),
+            line_to_byte_idx(TEXT_LINES, 1).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 3)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 2),
+            line_to_byte_idx(TEXT_LINES, 2).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 2)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 3),
+            line_to_byte_idx(TEXT_LINES, 3).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 1)
         );
         assert_eq!(
-            line_to_byte_idx(TEXT_LINES, 4),
+            line_to_byte_idx(TEXT_LINES, 4).byte_idx,
             reverse_line_to_byte_idx(TEXT_LINES, 0)
         );
 
@@ -1393,14 +1403,14 @@ mod tests {
     #[test]
     fn line_byte_round_trip() {
         let text = "\nHere\nare\nsome\nwords\n";
-        assert_eq!(6, line_to_byte_idx(text, byte_to_line_idx(text, 6)));
-        assert_eq!(2, byte_to_line_idx(text, line_to_byte_idx(text, 2)));
+        assert_eq!(6, line_to_byte_idx(text, byte_to_line_idx(text, 6)).byte_idx);
+        assert_eq!(2, byte_to_line_idx(text, line_to_byte_idx(text, 2).byte_idx));
 
-        assert_eq!(0, line_to_byte_idx(text, byte_to_line_idx(text, 0)));
-        assert_eq!(0, byte_to_line_idx(text, line_to_byte_idx(text, 0)));
+        assert_eq!(0, line_to_byte_idx(text, byte_to_line_idx(text, 0)).byte_idx);
+        assert_eq!(0, byte_to_line_idx(text, line_to_byte_idx(text, 0).byte_idx));
 
-        assert_eq!(21, line_to_byte_idx(text, byte_to_line_idx(text, 21)));
-        assert_eq!(5, byte_to_line_idx(text, line_to_byte_idx(text, 5)));
+        assert_eq!(21, line_to_byte_idx(text, byte_to_line_idx(text, 21)).byte_idx);
+        assert_eq!(5, byte_to_line_idx(text, line_to_byte_idx(text, 5).byte_idx));
     }
 
     #[test]

@@ -510,7 +510,7 @@ proptest! {
         let idx = idx % (line_count + 1);
         assert_eq!(
             line_to_byte_index_slow(text, idx),
-            line_to_byte_idx(text, idx),
+            line_to_byte_idx(text, idx).byte_idx,
         );
     }
 
