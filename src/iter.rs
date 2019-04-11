@@ -673,6 +673,8 @@ impl<'a> Iterator for Chunks<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+
     use super::Lines;
     use Rope;
 
@@ -764,8 +766,8 @@ mod tests {
         let r = Rope::from_str(TEXT);
         let s = r.slice(..);
 
-        assert_eq!(34, r.lines().count());
-        assert_eq!(34, s.lines().count());
+        assert_eq!(33, r.lines().count());
+        assert_eq!(33, s.lines().count());
 
         // Rope
         let mut lines = r.lines();
@@ -782,7 +784,6 @@ mod tests {
                 lines.next().unwrap()
             );
         }
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
 
         // Slice
@@ -800,7 +801,6 @@ mod tests {
                 lines.next().unwrap()
             );
         }
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
     }
 
@@ -830,19 +830,17 @@ mod tests {
         let r = Rope::from_str(text);
         let s = r.slice(..);
 
-        assert_eq!(3, r.lines().count());
-        assert_eq!(3, s.lines().count());
+        assert_eq!(2, r.lines().count());
+        assert_eq!(2, s.lines().count());
 
         let mut lines = r.lines();
         assert_eq!("Hello there!\n", lines.next().unwrap());
         assert_eq!("How goes it?\n", lines.next().unwrap());
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
 
         let mut lines = s.lines();
         assert_eq!("Hello there!\n", lines.next().unwrap());
         assert_eq!("How goes it?\n", lines.next().unwrap());
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
     }
 
@@ -854,7 +852,7 @@ mod tests {
         let s2 = r.slice(..26);
 
         assert_eq!(2, s1.lines().count());
-        assert_eq!(3, s2.lines().count());
+        assert_eq!(2, s2.lines().count());
 
         let mut lines = s1.lines();
         assert_eq!("Hello there!\n", lines.next().unwrap());
@@ -864,7 +862,6 @@ mod tests {
         let mut lines = s2.lines();
         assert_eq!("Hello there!\n", lines.next().unwrap());
         assert_eq!("How goes it?\n", lines.next().unwrap());
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
     }
 
@@ -874,15 +871,13 @@ mod tests {
         let r = Rope::from_str(text);
         let s = r.slice(..);
 
-        assert_eq!(1, r.lines().count());
-        assert_eq!(1, s.lines().count());
+        assert_eq!(0, r.lines().count());
+        assert_eq!(0, s.lines().count());
 
         let mut lines = r.lines();
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
 
         let mut lines = s.lines();
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
     }
 
@@ -930,17 +925,15 @@ mod tests {
         let r = Rope::from_str(text);
         let s = r.slice(..);
 
-        assert_eq!(2, r.lines().count());
-        assert_eq!(2, s.lines().count());
+        assert_eq!(1, r.lines().count());
+        assert_eq!(1, s.lines().count());
 
         let mut lines = r.lines();
         assert_eq!("\n", lines.next().unwrap());
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
 
         let mut lines = s.lines();
         assert_eq!("\n", lines.next().unwrap());
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
     }
 
@@ -950,19 +943,17 @@ mod tests {
         let r = Rope::from_str(text);
         let s = r.slice(..);
 
-        assert_eq!(3, r.lines().count());
-        assert_eq!(3, s.lines().count());
+        assert_eq!(2, r.lines().count());
+        assert_eq!(2, s.lines().count());
 
         let mut lines = r.lines();
         assert_eq!("a\n", lines.next().unwrap());
         assert_eq!("b\n", lines.next().unwrap());
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
 
         let mut lines = s.lines();
         assert_eq!("a\n", lines.next().unwrap());
         assert_eq!("b\n", lines.next().unwrap());
-        assert_eq!("", lines.next().unwrap());
         assert!(lines.next().is_none());
     }
 
@@ -989,7 +980,7 @@ mod tests {
     }
 
     #[test]
-    fn lines_11() {
+    fn double_ended_lines_01() {
         let mut switch = true;
         let mut lines = TEXT.lines();
         let mut next = |front: &mut Vec<&str>, back: &mut Vec<&str>| {
@@ -1011,6 +1002,74 @@ mod tests {
         assert_eq!(forward, front);
     }
 
+    fn collect<I: ExactSizeIterator + Clone, U: Debug + Eq>(
+        iter: I,
+        next: fn(&mut I) -> Option<U>,
+    ) -> Vec<U> {
+        let n = iter.clone().len();
+        let mut m_iter = iter.clone();
+        let mut vec = Vec::with_capacity(n);
+
+        for i in 0..n {
+            let len = m_iter.clone().len();
+            let rs = next(&mut m_iter).unwrap_or_else(|| {
+                panic!(
+                    "Expected Iterator to hold {} items. Iterator returned None at {}",
+                    n, i
+                )
+            });
+
+            assert_eq!(len - 1, m_iter.clone().len());
+
+            vec.push(rs);
+        }
+        assert_eq!(None, next(&mut m_iter));
+        assert_eq!(None, next(&mut m_iter));
+
+        vec
+    }
+
+    fn reverse<U>(vec: Vec<U>) -> Vec<U> {
+        vec.into_iter().rev().collect()
+    }
+
+    #[test]
+    /// Check Lines Iterator is the same forward and backwards.
+    fn double_ended_lines_02() {
+        let light = Lines::from_str(TEXT);
+        let full = Rope::from_str(TEXT);
+        let full = full.lines();
+
+        let lf = collect(light.clone(), Iterator::next);
+        let lb = reverse(collect(light, DoubleEndedIterator::next_back));
+
+        let ff = collect(full.clone(), Iterator::next);
+        let fb = reverse(collect(full, DoubleEndedIterator::next_back));
+
+        assert_eq!(lf, lb);
+        assert_eq!(ff, fb);
+        assert_eq!(ff, lf);
+    }
+
+    #[test]
+    /// Text without trailing line-break.
+    fn double_ended_lines_03() {
+        let text = &TEXT[..TEXT.len() - 2];
+        let light = Lines::from_str(text);
+        let full = Rope::from_str(text);
+        let full = full.lines();
+
+        let lf = collect(light.clone(), Iterator::next);
+        let lb = reverse(collect(light, DoubleEndedIterator::next_back));
+
+        let ff = collect(full.clone(), Iterator::next);
+        let fb = reverse(collect(full, DoubleEndedIterator::next_back));
+
+        assert_eq!(lf, lb);
+        assert_eq!(ff, fb);
+        assert_eq!(ff, lf);
+    }
+
     #[test]
     fn lines_size_hint_01() {
         let light = Lines::from_str(TEXT);
@@ -1029,7 +1088,10 @@ mod tests {
         let light = Lines::from_str(TEXT);
         assert_eq!(full.lines().count(), full.lines().len());
         assert_eq!(full.lines().count(), light.clone().count());
-        assert_eq!(dbg!(light.clone()).count(), light.clone().len());
+        assert_eq!(light.clone().count(), light.clone().len());
+
+        collect(light, Iterator::next);
+        collect(full.lines(), Iterator::next);
     }
 
     #[test]
@@ -1060,10 +1122,7 @@ mod tests {
         let f = full.clone().skip(2).take(2);
         let l = light.clone().skip(2).take(2);
 
-        let fv = f.clone().next();
-        let lv = l.clone().next();
-
-        assert_eq!(fv, lv);
+        assert_eq!(f.clone().next(), l.clone().next());
 
         let nf = full.clone().narrow(2..4);
         let nl = light.clone().narrow(2..4);
