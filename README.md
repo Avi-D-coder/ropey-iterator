@@ -1,9 +1,18 @@
 Forked from https://github.com/cessen/ropey
-# Ropey
 
-[![Travis CI Build Status][trav-ci-img]][trav-ci]
-[![Latest Release][crates-io-badge]][crates-io-url]
-[![Documentation][docs-rs-img]][docs-rs-url]
+## Fork Features
+- #### Lines
+    - `DoubleEndedIterator` over `Lines`
+    - `ExactSizeIterator` and `size_hint()` for `Lines`
+    - Ergonomic linewise Indexing with `narrow()`
+    - `Eq` for `Lines`
+    - `Debug` for `Lines`
+    - Optimized `nth()` on `Lines`
+    - **Breaking Change:** an empty line is not added after a trailing/terminating line-break. The new behavior is more consistent with the lines `Iterators` in `std`. 
+- #### General
+    - `Hash` for `Rope` and `RopeSlice`
+
+# Ropey
 
 Ropey is a utf8 text rope for Rust, designed to be the backing text-buffer for
 applications such as text editors.  Ropey is fast, robust, and can handle huge
