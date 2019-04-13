@@ -136,6 +136,8 @@ enum LinesEnum<'a> {
         node: &'a Arc<Node>,
         start_char: usize,
         end_char: usize,
+        // The starting line_idx
+        offset_line_idx: usize,
         // The next line
         line_idx: usize,
         // The next reversed line
@@ -149,6 +151,19 @@ enum LinesEnum<'a> {
         // The number of lines in the `text` is lazily calculated
         rev_line_idx: UnsafeCell<Option<usize>>,
     },
+}
+
+/// A line produced by the `Lines` `Iterator`.
+pub struct Line<'a> {
+    pub rope_slice: RopeSlice<'a>,
+    /// The zero indexed line number relative to the start of `Lines` `Iterator`.
+    pub line_number: usize,
+}
+
+impl<'a> Line<'a> {
+    pub fn chunks(&self) -> Chunks<'a> {
+        self.rope_slice.chunks()
+    }
 }
 
 impl<'a> Lines<'a> {
@@ -234,7 +249,8 @@ fn full_nth<'a>(
     end_char: usize,
     line_idx: &mut usize,
     rev_line_idx: usize,
-) -> Option<RopeSlice<'a>> {
+    offset_line_idx: usize,
+) -> Option<Line<'a>> {
     let nth_idx = *line_idx + n;
     if nth_idx > rev_line_idx {
         return None;
@@ -258,14 +274,14 @@ fn full_nth<'a>(
 
         *line_idx = nth_idx + 1;
 
-        return Some(RopeSlice::new_with_range(node, a, b));
+        return Some(Line{ rope_slice:RopeSlice::new_with_range(node, a, b), line_number: line_idx - offset_line_idx});
     }
 }
 
 impl<'a> Iterator for Lines<'a> {
-    type Item = RopeSlice<'a>;
+    type Item = Line<'a>;
 
-    fn next(&mut self) -> Option<RopeSlice<'a>> {
+    fn next(&mut self) -> Option<Line<'a>> {
         match self.variant {
             LinesEnum::Full {
                 ref mut node,
@@ -273,6 +289,7 @@ impl<'a> Iterator for Lines<'a> {
                 end_char,
                 ref mut line_idx,
                 rev_line_idx,
+                ..
             } => full_nth(0, node, start_char, end_char, line_idx, rev_line_idx),
             LinesEnum::Light {
                 ref mut text,
@@ -286,21 +303,22 @@ impl<'a> Iterator for Lines<'a> {
                     let split_idx = line_to_byte_idx(text, 1).byte_idx;
                     let t = &text[..split_idx];
                     *text = &text[split_idx..];
-                    return Some(t.into());
+                    return Some(Line { rope_slice: t.into(), line_number: *line_idx});
                 }
             }
         }
     }
 
-    fn nth(&mut self, n: usize) -> Option<RopeSlice<'a>> {
+    fn nth(&mut self, n: usize) -> Option<Line<'a>> {
         match self.variant {
             LinesEnum::Full {
                 ref mut node,
                 start_char,
                 end_char,
+                offset_line_idx,
                 ref mut line_idx,
                 rev_line_idx,
-            } => full_nth(n, node, start_char, end_char, line_idx, rev_line_idx),
+            } => full_nth(n, node, start_char, end_char, line_idx, rev_line_idx, offset_line_idx),
             LinesEnum::Light {
                 ref mut text,
                 ref mut line_idx,
@@ -365,12 +383,13 @@ impl<'a> Iterator for Lines<'a> {
 }
 
 impl<'a> DoubleEndedIterator for Lines<'a> {
-    fn next_back(&mut self) -> Option<RopeSlice<'a>> {
+    fn next_back(&mut self) -> Option<Line<'a>> {
         match self.variant {
             LinesEnum::Full {
                 ref mut node,
                 start_char,
                 end_char,
+                offset_line_idx,
                 ref mut line_idx,
                 ref mut rev_line_idx,
             } => {
@@ -409,7 +428,7 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
                         *line_idx += 1;
                     };
 
-                    return Some(RopeSlice::new_with_range(node, a, b));
+                    return Some(Line{ rope_slice:RopeSlice::new_with_range(node, a, b), line_number: r_line_idx - offset_line_idx});
                 }
             }
             LinesEnum::Light {
@@ -426,7 +445,7 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
                     let split_idx = reverse_line_to_byte_idx(text, 1);
                     let t = &text[split_idx..];
                     *text = &text[..split_idx];
-                    return Some(t.into());
+                    return Some(Line{ rope_slice:t.into(), line_number: rev_line_idx});
                 }
             }
         }
@@ -501,12 +520,14 @@ impl<'l> Clone for Lines<'l> {
                     node,
                     start_char,
                     end_char,
+                    offset_line_idx,
                     line_idx,
                     rev_line_idx,
                 } => LinesEnum::Full {
                     node,
                     start_char,
                     end_char,
+                    offset_line_idx,
                     line_idx,
                     rev_line_idx,
                 },
