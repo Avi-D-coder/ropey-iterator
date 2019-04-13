@@ -374,13 +374,9 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
                 ref mut line_idx,
                 ref mut rev_line_idx,
             } => {
-                let self_ewlb = self.ends_with_line_break.get();
-                let ends_with_line_break = unsafe { *self_ewlb }.unwrap_or_else(|| {
-                    let ewlb = full_ends_with_line_break(node, end_char);
-                    unsafe { *self_ewlb = Some(ewlb) };
-                    ewlb
-                });
-                let r_line_idx = *rev_line_idx + !ends_with_line_break as usize;
+                let r_line_idx = *rev_line_idx
+                    + !full_ends_with_line_break(&self.ends_with_line_break, node, end_char)
+                        as usize;
 
                 // `next` uses `>` and a early return if `a >= end_char`.
                 // `next_back` uses `>=` and accounts for slices without a terminating line-break.
@@ -433,13 +429,22 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
     }
 }
 
-fn full_ends_with_line_break(node: &Arc<Node>, end_char: usize) -> bool {
+fn full_ends_with_line_break(
+    ewlb: &UnsafeCell<Option<bool>>,
+    node: &Arc<Node>,
+    end_char: usize,
+) -> bool {
+    if let Some(ends_with_line_break) = unsafe { *ewlb.get() } {
+        return ends_with_line_break;
+    }
     let (chunk, _, chunk_char_idx, _) = node.get_chunk_at_char(end_char);
-    match chunk.chars().nth(end_char - chunk_char_idx - 1).unwrap() {
+    let ends_with_line_break = match chunk.chars().nth(end_char - chunk_char_idx - 1).unwrap() {
         '\u{000A}' | '\u{000B}' | '\u{000C}' | '\u{000D}' | '\u{0085}' | '\u{2028}'
         | '\u{2029}' => true,
         _ => false,
-    }
+    };
+    unsafe { *ewlb.get() = Some(ends_with_line_break) };
+    ends_with_line_break
 }
 
 impl<'l> ExactSizeIterator for Lines<'l> {
@@ -453,14 +458,8 @@ impl<'l> ExactSizeIterator for Lines<'l> {
                 end_char,
                 ..
             } => {
-                let ends_with_line_break = unsafe { *self.ends_with_line_break.get() }
-                    .unwrap_or_else(|| {
-                        let ends_with_line_break = full_ends_with_line_break(node, end_char);
-                        unsafe { *self.ends_with_line_break.get() = Some(ends_with_line_break) };
-                        ends_with_line_break
-                    });
-
-                let e = !ends_with_line_break as usize;
+                let e =
+                    !full_ends_with_line_break(&self.ends_with_line_break, node, end_char) as usize;
                 rev_line_idx + e - (rev_line_idx + e).min(line_idx)
             }
             LinesEnum::Light {
@@ -523,6 +522,47 @@ impl<'l> Clone for Lines<'l> {
 
             ends_with_line_break: UnsafeCell::new(unsafe { *self.ends_with_line_break.get() }),
         }
+    }
+}
+
+impl<'a> From<&Lines<'a>> for RopeSlice<'a> {
+    fn from(lines: &Lines<'a>) -> RopeSlice<'a> {
+        match lines.variant {
+            LinesEnum::Full {
+                node,
+                start_char,
+                end_char,
+                line_idx,
+                rev_line_idx,
+            } => {
+                let a = {
+                    // Find the char that corresponds to the start of the line.
+                    let (chunk, _, c, l) = node.get_chunk_at_line_break(line_idx);
+                    (c + line_to_char_idx(chunk, line_idx - l)).max(start_char)
+                };
+                // Early out if we're past the specified end char
+                if a >= end_char {
+                    return "".into();
+                }
+
+                let b = {
+                    let r_line_idx = rev_line_idx
+                        + !full_ends_with_line_break(&lines.ends_with_line_break, node, end_char)
+                            as usize;
+                    let (chunk, _, c, l) = node.get_chunk_at_line_break(r_line_idx);
+                    (end_char).min(c + line_to_char_idx(chunk, r_line_idx - l))
+                };
+
+                RopeSlice::new_with_range(node, a, b)
+            }
+            LinesEnum::Light { text, .. } => RopeSlice::from(text),
+        }
+    }
+}
+
+impl<'a> From<Lines<'a>> for RopeSlice<'a> {
+    fn from(lines: Lines<'a>) -> RopeSlice<'a> {
+        (&lines).into()
     }
 }
 
@@ -706,6 +746,7 @@ mod tests {
 
     use super::Lines;
     use Rope;
+    use RopeSlice;
 
     const TEXT: &str = "\r\n\
                         Hello there!  How're you doing?  It's a fine day, \
@@ -1168,6 +1209,26 @@ mod tests {
             f.clone().collect::<Vec<_>>(),
             nl.clone().collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn lines_into_ropeslice_01() {
+        let r = Rope::from(TEXT);
+        let rs = RopeSlice::from(r.lines());
+        assert_eq!(r.slice(..), rs);
+
+        let mut rs = r.lines();
+        rs.nth(1);
+        let rs = RopeSlice::from(rs).lines();
+        assert_eq!(rs, r.lines().narrow(2..r.lines().len()));
+
+        let mut rs = r.lines();
+        rs.next_back();
+        let rs = RopeSlice::from(rs).lines();
+        assert_eq!(rs, r.lines().narrow(0..rs.len()));
+
+        let rs = RopeSlice::from(r.lines().narrow(3..6)).lines();
+        assert_eq!(dbg!(rs), dbg!(r.lines().narrow(3..6)));
     }
 
     #[test]
