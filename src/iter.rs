@@ -382,6 +382,8 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
                 });
                 let r_line_idx = *rev_line_idx + !ends_with_line_break as usize;
 
+                // `next` uses `>` and a early return if `a >= end_char`.
+                // `next_back` uses `>=` and accounts for slices without a terminating line-break.
                 if *line_idx >= r_line_idx {
                     return None;
                 } else {
