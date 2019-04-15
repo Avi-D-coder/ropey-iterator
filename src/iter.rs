@@ -6,7 +6,6 @@
 //! of the first and last yielded item will be truncated to match the
 //! `RopeSlice`.
 
-use std::cell::UnsafeCell;
 use std::fmt;
 use std::iter::FusedIterator;
 use std::ops::Range;
@@ -126,11 +125,12 @@ impl<'a> FusedIterator for Chars<'a> {}
 ///
 /// The last line is returned even if blank, in which case it
 /// is returned as an empty slice.
+#[derive(Clone)]
 pub struct Lines<'a> {
     variant: LinesEnum<'a>,
-    ends_with_line_break: UnsafeCell<Option<bool>>,
 }
 
+#[derive(Clone)]
 enum LinesEnum<'a> {
     Full {
         node: &'a Arc<Node>,
@@ -147,21 +147,22 @@ enum LinesEnum<'a> {
         // text empty returns None.
         line_idx: usize,
         // The number of lines in the `text` is lazily calculated
-        rev_line_idx: UnsafeCell<Option<usize>>,
+        rev_line_idx: usize,
     },
 }
 
 impl<'a> Lines<'a> {
     pub(crate) fn new(node: &Arc<Node>) -> Lines {
+        let end_char = node.text_info().chars as usize;
         Lines {
             variant: LinesEnum::Full {
-                node: node,
+                node,
                 start_char: 0,
-                end_char: node.text_info().chars as usize,
+                end_char,
                 line_idx: 0,
-                rev_line_idx: node.line_break_count(),
+                rev_line_idx: node.line_break_count()
+                    + !full_ends_with_line_break(node, end_char) as usize,
             },
-            ends_with_line_break: UnsafeCell::new(None),
         }
     }
 
@@ -169,8 +170,8 @@ impl<'a> Lines<'a> {
         Lines {
             variant: LinesEnum::Full {
                 node: node,
-                start_char: start_char,
-                end_char: end_char,
+                start_char,
+                end_char,
                 line_idx: {
                     let (chunk, _, c, l) = node.get_chunk_at_char(start_char);
                     l + char_to_line_idx(chunk, start_char - c)
@@ -178,10 +179,8 @@ impl<'a> Lines<'a> {
                 rev_line_idx: {
                     let (chunk, _, c, l) = node.get_chunk_at_char(end_char);
                     l + char_to_line_idx(chunk, end_char - c)
-                },
+                } + !full_ends_with_line_break(node, end_char) as usize,
             },
-
-            ends_with_line_break: UnsafeCell::new(None),
         }
     }
 
@@ -190,9 +189,8 @@ impl<'a> Lines<'a> {
             variant: LinesEnum::Light {
                 text: text,
                 line_idx: 0,
-                rev_line_idx: UnsafeCell::new(None),
+                rev_line_idx: count_line_breaks(text) + !ends_with_line_break(text) as usize,
             },
-            ends_with_line_break: UnsafeCell::new(None),
         }
     }
 
@@ -208,18 +206,13 @@ impl<'a> Lines<'a> {
                 *rev_line_idx = (*rev_line_idx).min(lines.end - 1 + *line_idx);
                 *line_idx = (*rev_line_idx).min(lines.start + *line_idx);
             }
-            LinesEnum::Light {
-                text,
-                line_idx,
-                rev_line_idx,
-            } => {
+            LinesEnum::Light { text, line_idx, .. } => {
                 *line_idx += lines.start;
                 let split_idx = line_to_byte_idx(text, lines.start).byte_idx;
                 let start_text = &text[split_idx..];
 
-                let split_idx = line_to_byte_idx(start_text, lines.end - lines.start);
-                *text = &start_text[..split_idx.byte_idx];
-                *rev_line_idx = UnsafeCell::new(Some(*line_idx + split_idx.line_breaks));
+                let split_idx = line_to_byte_idx(start_text, lines.end - lines.start).byte_idx;
+                *text = &start_text[..split_idx];
             }
         }
         self
@@ -229,7 +222,7 @@ impl<'a> Lines<'a> {
 #[inline]
 fn full_nth<'a>(
     n: usize,
-    node: &mut &'a Arc<Node>,
+    node: &'a Arc<Node>,
     start_char: usize,
     end_char: usize,
     line_idx: &mut usize,
@@ -295,7 +288,7 @@ impl<'a> Iterator for Lines<'a> {
     fn nth(&mut self, n: usize) -> Option<RopeSlice<'a>> {
         match self.variant {
             LinesEnum::Full {
-                ref mut node,
+                node,
                 start_char,
                 end_char,
                 ref mut line_idx,
@@ -335,30 +328,20 @@ impl<'a> Iterator for Lines<'a> {
             } => {
                 // If the RopeSlice does not end with a line-break it is one longer.
                 // For the upper bound we fallback to assuming the longer variant.
-                let ends_with_line_break =
-                    unsafe { *self.ends_with_line_break.get() }.unwrap_or(false);
-                let e = !ends_with_line_break as usize;
-                let len = rev_line_idx + e - (rev_line_idx + e).min(line_idx);
+                let len = rev_line_idx - rev_line_idx.min(line_idx);
                 (len, Some(len))
             }
             LinesEnum::Light {
                 line_idx,
-                ref rev_line_idx,
+                rev_line_idx,
                 text,
                 ..
             } => {
                 if text.is_empty() {
                     return (0, Some(0));
                 }
-                if let Some(rev_line_idx) = unsafe { *rev_line_idx.get() } {
-                    let len = rev_line_idx - rev_line_idx.min(line_idx);
-                    let ends_with_line_break =
-                        unsafe { *self.ends_with_line_break.get() }.unwrap_or(false);
-
-                    (len, Some(len + !ends_with_line_break as usize))
-                } else {
-                    (0, None)
-                }
+                let len = rev_line_idx - rev_line_idx.min(line_idx);
+                (len, Some(len))
             }
         }
     }
@@ -368,31 +351,26 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
     fn next_back(&mut self) -> Option<RopeSlice<'a>> {
         match self.variant {
             LinesEnum::Full {
-                ref mut node,
+                node,
                 start_char,
                 end_char,
                 ref mut line_idx,
                 ref mut rev_line_idx,
             } => {
-                let r_line_idx = *rev_line_idx
-                    + !full_ends_with_line_break(&self.ends_with_line_break, node, end_char)
-                        as usize;
-
                 // `next` uses `>` and a early return if `a >= end_char`.
-                // `next_back` uses `>=` and accounts for slices without a terminating line-break.
-                if *line_idx >= r_line_idx {
+                if *line_idx >= *rev_line_idx {
                     return None;
                 } else {
                     let a = {
                         // Find the char that corresponds to the start of the line.
-                        let (chunk, _, c, l) = node.get_chunk_at_line_break(r_line_idx - 1);
-                        (c + line_to_char_idx(chunk, r_line_idx - 1 - l)).max(start_char)
+                        let (chunk, _, c, l) = node.get_chunk_at_line_break(*rev_line_idx - 1);
+                        (c + line_to_char_idx(chunk, *rev_line_idx - 1 - l)).max(start_char)
                     };
 
-                    let b = if r_line_idx <= node.line_break_count() {
+                    let b = if *rev_line_idx <= node.line_break_count() {
                         // Find the char that corresponds to the end of the line.
-                        let (chunk, _, c, l) = node.get_chunk_at_line_break(r_line_idx);
-                        c + line_to_char_idx(chunk, r_line_idx - l)
+                        let (chunk, _, c, l) = node.get_chunk_at_line_break(*rev_line_idx);
+                        c + line_to_char_idx(chunk, *rev_line_idx - l)
                     } else {
                         node.char_count()
                     }
@@ -416,9 +394,7 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
                 if text.is_empty() {
                     return None;
                 } else {
-                    if let Some(ref mut r_idx) = unsafe { *rev_line_idx.get() } {
-                        *r_idx -= 1;
-                    };
+                    *rev_line_idx -= 1;
                     let split_idx = reverse_line_to_byte_idx(text, 1);
                     let t = &text[split_idx..];
                     *text = &text[..split_idx];
@@ -429,22 +405,16 @@ impl<'a> DoubleEndedIterator for Lines<'a> {
     }
 }
 
-fn full_ends_with_line_break(
-    ewlb: &UnsafeCell<Option<bool>>,
-    node: &Arc<Node>,
-    end_char: usize,
-) -> bool {
-    if let Some(ends_with_line_break) = unsafe { *ewlb.get() } {
-        return ends_with_line_break;
-    }
+fn full_ends_with_line_break(node: &Arc<Node>, end_char: usize) -> bool {
     let (chunk, _, chunk_char_idx, _) = node.get_chunk_at_char(end_char);
-    let ends_with_line_break = match chunk.chars().nth(end_char - chunk_char_idx - 1).unwrap() {
+    if chunk.is_empty() {
+        return false;
+    };
+    match chunk.chars().nth(end_char - chunk_char_idx - 1).unwrap() {
         '\u{000A}' | '\u{000B}' | '\u{000C}' | '\u{000D}' | '\u{0085}' | '\u{2028}'
         | '\u{2029}' => true,
         _ => false,
-    };
-    unsafe { *ewlb.get() = Some(ends_with_line_break) };
-    ends_with_line_break
+    }
 }
 
 impl<'l> ExactSizeIterator for Lines<'l> {
@@ -452,75 +422,21 @@ impl<'l> ExactSizeIterator for Lines<'l> {
         // A mutable reference is necessary for memorization of Light str length
         match self.variant {
             LinesEnum::Full {
-                node,
                 line_idx,
                 rev_line_idx,
-                end_char,
                 ..
-            } => {
-                let e =
-                    !full_ends_with_line_break(&self.ends_with_line_break, node, end_char) as usize;
-                rev_line_idx + e - (rev_line_idx + e).min(line_idx)
-            }
+            } => rev_line_idx - rev_line_idx.min(line_idx),
             LinesEnum::Light {
                 line_idx,
-                ref rev_line_idx,
+                rev_line_idx,
                 text,
             } => {
                 if text.is_empty() {
                     return 0;
                 }
-                if let Some(rev_line_idx) = unsafe { *rev_line_idx.get() } {
-                    rev_line_idx - rev_line_idx.min(line_idx)
-                } else {
-                    let ends_with_line_break = unsafe { *self.ends_with_line_break.get() }
-                        .unwrap_or_else(|| {
-                            let ends_with_line_break = ends_with_line_break(text);
-                            unsafe {
-                                *self.ends_with_line_break.get() = Some(ends_with_line_break)
-                            };
-                            ends_with_line_break
-                        });
 
-                    // Start counts as 1
-                    let mut count = count_line_breaks(text) + !ends_with_line_break as usize;
-                    unsafe { *rev_line_idx.get() = Some(line_idx + count) };
-                    count
-                }
+                rev_line_idx - rev_line_idx.min(line_idx)
             }
-        }
-    }
-}
-
-impl<'l> Clone for Lines<'l> {
-    fn clone(&self) -> Self {
-        Lines {
-            variant: match self.variant {
-                LinesEnum::Full {
-                    node,
-                    start_char,
-                    end_char,
-                    line_idx,
-                    rev_line_idx,
-                } => LinesEnum::Full {
-                    node,
-                    start_char,
-                    end_char,
-                    line_idx,
-                    rev_line_idx,
-                },
-                LinesEnum::Light {
-                    text,
-                    line_idx,
-                    ref rev_line_idx,
-                } => LinesEnum::Light {
-                    text,
-                    line_idx,
-                    rev_line_idx: UnsafeCell::new(unsafe { *rev_line_idx.get() }),
-                },
-            },
-
-            ends_with_line_break: UnsafeCell::new(unsafe { *self.ends_with_line_break.get() }),
         }
     }
 }
@@ -546,11 +462,8 @@ impl<'a> From<&Lines<'a>> for RopeSlice<'a> {
                 }
 
                 let b = {
-                    let r_line_idx = rev_line_idx
-                        + !full_ends_with_line_break(&lines.ends_with_line_break, node, end_char)
-                            as usize;
-                    let (chunk, _, c, l) = node.get_chunk_at_line_break(r_line_idx);
-                    (end_char).min(c + line_to_char_idx(chunk, r_line_idx - l))
+                    let (chunk, _, c, l) = node.get_chunk_at_line_break(rev_line_idx + 1);
+                    (end_char).min(c + line_to_char_idx(chunk, rev_line_idx + 1 - l))
                 };
 
                 RopeSlice::new_with_range(node, a, b)
@@ -1147,15 +1060,27 @@ mod tests {
 
         assert!(full.lines().size_hint().0 >= full.lines().len());
 
-        assert_eq!(light.size_hint().0, 0);
-        assert_eq!(light.size_hint().1, None);
+        assert_eq!(light.size_hint(), full.lines().size_hint());
         assert_eq!(light.len(), light.size_hint().0);
     }
 
     #[test]
-    fn exact_lines_len() {
+    fn exact_lines_len_01() {
         let full = Rope::from_str(TEXT);
         let light = Lines::from_str(TEXT);
+        assert_eq!(full.lines().count(), full.lines().len());
+        assert_eq!(full.lines().count(), light.clone().count());
+        assert_eq!(light.clone().count(), light.clone().len());
+
+        collect(light, Iterator::next);
+        collect(full.lines(), Iterator::next);
+    }
+
+    #[test]
+    fn exact_lines_len_02() {
+        let text = &TEXT[..TEXT.len() - 2];
+        let full = Rope::from_str(text);
+        let light = Lines::from_str(text);
         assert_eq!(full.lines().count(), full.lines().len());
         assert_eq!(full.lines().count(), light.clone().count());
         assert_eq!(light.clone().count(), light.clone().len());
@@ -1228,7 +1153,7 @@ mod tests {
         assert_eq!(rs, r.lines().narrow(0..rs.len()));
 
         let rs = RopeSlice::from(r.lines().narrow(3..6)).lines();
-        assert_eq!(dbg!(rs), dbg!(r.lines().narrow(3..6)));
+        assert_eq!(rs, r.lines().narrow(3..6));
     }
 
     #[test]
