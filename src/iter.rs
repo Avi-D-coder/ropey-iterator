@@ -184,12 +184,14 @@ impl<'a> Lines<'a> {
         }
     }
 
-    pub(crate) fn from_str(text: &str) -> Lines {
+    /// Caller guaranties `line_break_count` is accurate/consistent with `str_utils::count_line_breaks`.
+    /// If you do not know the `line_break_count` use `Lines::from` instead.
+    pub fn from_str(text: &str, line_break_count: usize) -> Lines {
         Lines {
             variant: LinesEnum::Light {
                 text: text,
                 line_idx: 0,
-                rev_line_idx: count_line_breaks(text) + !ends_with_line_break(text) as usize,
+                rev_line_idx: line_break_count + !ends_with_line_break(text) as usize,
             },
         }
     }
@@ -437,6 +439,18 @@ impl<'l> ExactSizeIterator for Lines<'l> {
 
                 rev_line_idx - rev_line_idx.min(line_idx)
             }
+        }
+    }
+}
+
+impl<'a> From<&'a str> for Lines<'a> {
+    fn from(text: &str) -> Lines {
+        Lines {
+            variant: LinesEnum::Light {
+                text: text,
+                line_idx: 0,
+                rev_line_idx: count_line_breaks(text) + !ends_with_line_break(text) as usize,
+            },
         }
     }
 }
@@ -1019,7 +1033,7 @@ mod tests {
     #[test]
     /// Check Lines Iterator is the same forward and backwards.
     fn double_ended_lines_02() {
-        let light = Lines::from_str(TEXT);
+        let light = Lines::from(TEXT);
         let full = Rope::from_str(TEXT);
         let full = full.lines();
 
@@ -1038,7 +1052,7 @@ mod tests {
     /// Text without trailing line-break.
     fn double_ended_lines_03() {
         let text = &TEXT[..TEXT.len() - 2];
-        let light = Lines::from_str(text);
+        let light = Lines::from(text);
         let full = Rope::from_str(text);
         let full = full.lines();
 
@@ -1055,7 +1069,7 @@ mod tests {
 
     #[test]
     fn lines_size_hint_01() {
-        let light = Lines::from_str(TEXT);
+        let light = Lines::from(TEXT);
         let full = Rope::from_str(TEXT);
 
         assert!(full.lines().size_hint().0 >= full.lines().len());
@@ -1067,7 +1081,7 @@ mod tests {
     #[test]
     fn exact_lines_len_01() {
         let full = Rope::from_str(TEXT);
-        let light = Lines::from_str(TEXT);
+        let light = Lines::from(TEXT);
         assert_eq!(full.lines().count(), full.lines().len());
         assert_eq!(full.lines().count(), light.clone().count());
         assert_eq!(light.clone().count(), light.clone().len());
@@ -1080,7 +1094,7 @@ mod tests {
     fn exact_lines_len_02() {
         let text = &TEXT[..TEXT.len() - 2];
         let full = Rope::from_str(text);
-        let light = Lines::from_str(text);
+        let light = Lines::from(text);
         assert_eq!(full.lines().count(), full.lines().len());
         assert_eq!(full.lines().count(), light.clone().count());
         assert_eq!(light.clone().count(), light.clone().len());
@@ -1091,7 +1105,7 @@ mod tests {
 
     #[test]
     fn narrow_lines_01() {
-        let light = Lines::from_str(TEXT);
+        let light = Lines::from(TEXT);
         let full = Rope::from_str(TEXT);
         let full = full.lines();
 
@@ -1110,7 +1124,7 @@ mod tests {
 
     #[test]
     fn narrow_lines_02() {
-        let light = Lines::from_str(TEXT);
+        let light = Lines::from(TEXT);
         let full = Rope::from_str(TEXT);
         let full = full.lines();
 

@@ -371,7 +371,7 @@ fn count_chars_internal<T: ByteChunk>(text: &[u8]) -> usize {
 /// - u{2028}        (Line Separator)
 /// - u{2029}        (Paragraph Separator)
 #[inline]
-pub(crate) fn count_line_breaks(text: &str) -> usize {
+pub fn count_line_breaks(text: &str) -> usize {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("sse2") {

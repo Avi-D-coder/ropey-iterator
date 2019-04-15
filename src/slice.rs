@@ -691,7 +691,11 @@ impl<'a> RopeSlice<'a> {
                 end_char,
                 ..
             }) => Lines::new_with_range(node, start_char as usize, end_char as usize),
-            RopeSlice(RSEnum::Light { text, .. }) => Lines::from_str(text),
+            RopeSlice(RSEnum::Light {
+                text,
+                line_break_count,
+                ..
+            }) => Lines::from_str(text, line_break_count as usize),
         }
     }
 
