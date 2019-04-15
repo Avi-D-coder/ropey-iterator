@@ -9,6 +9,8 @@ Forked from https://github.com/cessen/ropey
     - `Debug` for `Lines`
     - Optimized `nth()` on `Lines`
     - **Breaking Change:** an empty line is not added after a trailing/terminating line-break. The new behavior is more consistent with the lines `Iterators` in `std`. 
+    - Add `line-break-count` argument to `Lines::from_str`.
+    - Impl `Lines` `From` `&str`. 
 - #### General
     - `Hash` for `Rope` and `RopeSlice`
 
