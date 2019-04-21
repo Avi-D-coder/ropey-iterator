@@ -1,6 +1,6 @@
 use std;
 use std::hash::{Hash, Hasher};
-use std::ops::{Bound, RangeBounds};
+use std::ops::{Bound, Index, RangeBounds};
 use std::sync::Arc;
 
 use iter::{Bytes, Chars, Chunks, Lines};
@@ -362,6 +362,26 @@ impl<'a> RopeSlice<'a> {
         let (chunk, chunk_byte_idx, _, _) = self.chunk_at_byte(byte_idx);
         let chunk_rel_byte_idx = byte_idx - chunk_byte_idx;
         chunk.as_bytes()[chunk_rel_byte_idx]
+    }
+
+    /// Returns a reference to byte at `byte_idx`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `byte_idx` is out of bounds (i.e. `byte_idx >= len_bytes()`).
+    #[inline]
+    pub fn byte_ref(&self, byte_idx: usize) -> &u8 {
+        // Bounds check
+        assert!(
+            byte_idx < self.len_bytes(),
+            "Attempt to index past end of slice: byte index {}, slice byte length {}",
+            byte_idx,
+            self.len_bytes()
+        );
+
+        let (chunk, chunk_byte_idx, _, _) = self.chunk_at_byte(byte_idx);
+        let chunk_rel_byte_idx = byte_idx - chunk_byte_idx;
+        chunk.as_bytes().get(chunk_rel_byte_idx).unwrap()
     }
 
     /// Returns the char at `char_idx`.
@@ -1024,6 +1044,13 @@ impl<'a> Hash for RopeSlice<'a> {
         for c in self.chars() {
             c.hash(state)
         }
+    }
+}
+
+impl<'a> Index<usize> for RopeSlice<'a> {
+    type Output = u8;
+    fn index(&self, idx: usize) -> &u8 {
+        self.byte_ref(idx)
     }
 }
 
