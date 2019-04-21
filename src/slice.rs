@@ -223,6 +223,16 @@ impl<'a> RopeSlice<'a> {
         l + byte_to_line_idx(chunk, byte_idx - b)
     }
 
+    /// Convert byte index into common line, codepoint format.
+    pub fn byte_to_position(&self, byte_idx: usize) -> Position {
+        let (chunk, byte_idx, chunk_char_idx, chunk_line_idx) = self.chunk_at_byte(byte_idx);
+
+        Position {
+            line: chunk_line_idx + byte_to_line_idx(chunk, byte_idx),
+            character: chunk_char_idx + byte_to_char_idx(chunk, byte_idx),
+        }
+    }
+
     /// Returns the byte index of the given char.
     ///
     /// Notes:
@@ -714,6 +724,11 @@ impl<'a> RopeSlice<'a> {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone)]
+pub struct Position {
+    pub line: usize,
+    pub character: usize,
+}
 //==============================================================
 
 #[inline(always)]

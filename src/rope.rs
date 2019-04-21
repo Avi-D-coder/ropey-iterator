@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crlf;
 use iter::{Bytes, Chars, Chunks, Lines};
 use rope_builder::RopeBuilder;
-use slice::{end_bound_to_num, start_bound_to_num, RopeSlice};
+use slice::{end_bound_to_num, start_bound_to_num, RopeSlice, Position};
 use str_utils::{
     byte_to_char_idx, byte_to_line_idx, char_to_byte_idx, char_to_line_idx, line_to_byte_idx,
     line_to_char_idx,
@@ -774,6 +774,16 @@ impl Rope {
 
         let (chunk, b, _, l) = self.chunk_at_byte(byte_idx);
         l + byte_to_line_idx(chunk, byte_idx - b)
+    }
+
+    /// Convert byte index into common line, codepoint format.
+    pub fn byte_to_position(&self, byte_idx: usize) -> Position {
+        let (chunk, byte_idx, chunk_char_idx, chunk_line_idx) = self.chunk_at_byte(byte_idx);
+
+        Position {
+            line: chunk_line_idx + byte_to_line_idx(chunk, byte_idx),
+            character: chunk_char_idx + byte_to_char_idx(chunk, byte_idx),
+        }
     }
 
     /// Returns the byte index of the given char.
