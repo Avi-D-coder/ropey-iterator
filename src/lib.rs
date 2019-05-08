@@ -151,3 +151,4 @@ pub mod str_utils;
 pub use rope::Rope;
 pub use rope_builder::RopeBuilder;
 pub use slice::RopeSlice;
+pub use slice::Position;

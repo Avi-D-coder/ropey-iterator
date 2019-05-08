@@ -225,11 +225,13 @@ impl<'a> RopeSlice<'a> {
 
     /// Convert byte index into common line, codepoint format.
     pub fn byte_to_position(&self, byte_idx: usize) -> Position {
-        let (chunk, byte_idx, chunk_char_idx, chunk_line_idx) = self.chunk_at_byte(byte_idx);
+        let (chunk, chunk_byte_idx, _, chunk_line_idx) = self.chunk_at_byte(byte_idx);
 
+        let btl = byte_to_line_idx(chunk, byte_idx - chunk_byte_idx);
         Position {
-            line: chunk_line_idx + byte_to_line_idx(chunk, byte_idx),
-            character: chunk_char_idx + byte_to_char_idx(chunk, byte_idx),
+            line: chunk_line_idx + btl,
+            character: byte_to_char_idx(chunk, byte_idx - chunk_byte_idx)
+                - line_to_char_idx(chunk, btl),
         }
     }
 
