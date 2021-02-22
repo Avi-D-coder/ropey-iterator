@@ -18,7 +18,7 @@ smallvec = "0.6"
 
 [dev-dependencies]
 rand = "0.5"
-proptest = "0.8"
+proptest = "1.0"
 bencher = "0.1.5"
 unicode-segmentation = "1.2.1"
 
